@@ -1,0 +1,4 @@
+# tkinter
+bs4
+lxml
+pyqt5

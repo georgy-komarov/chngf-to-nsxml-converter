@@ -1,0 +1,2 @@
+class NSParserException(BaseException):
+    pass
