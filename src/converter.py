@@ -1,8 +1,10 @@
 from bs4 import BeautifulSoup
+from bs4 import Tag
 
 from exceptions import *
 
 
+# NSParser classes
 class Day:
     def __init__(self, id, name):
         self.id = id
@@ -12,7 +14,7 @@ class Day:
         return self.name
 
 
-class Room:
+class NSRoom:
     def __init__(self, id, name):
         self.id = id
         self.name = name
@@ -21,7 +23,7 @@ class Room:
         return self.name
 
 
-class Subject:
+class NSSubject:
     def __init__(self, id, name, abbr):
         self.id = id
         self.name = name
@@ -35,7 +37,7 @@ class Subject:
         return self.name
 
 
-class Teacher:
+class NSTeacher:
     def __init__(self, id, firstname, lastname, midname):
         self.id = id
         self.firstname = firstname
@@ -47,7 +49,7 @@ class Teacher:
         return self.name
 
 
-class PlanLesson:
+class NSLesson:
     def __init__(self, id, name):
         self.id = id
         self.name = name
@@ -69,7 +71,7 @@ class PlanLesson:
         return self.name
 
 
-class Class:
+class NSClass:
     def __init__(self, id, name, boys, girls):
         self.id = id
         self.name = name.upper()
@@ -79,6 +81,7 @@ class Class:
         self.students = self.boys + self.girls
 
         self.plan = []
+        self.timetable_subjects = set()
 
     def add_lesson(self, lesson):
         self.plan.append(lesson)
@@ -87,11 +90,22 @@ class Class:
         return self.name
 
 
-class NSParser:
-    DAYS = [Day(i, d) for i, d in enumerate(['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'])]
+# HTML class
+class HTMLSubject:
+    def __init__(self, name, teacher, room=None):
+        self.name = name
+        self.teacher = teacher
+        self.room = room
 
+
+class TimetableConverter:
+    DAYS = [Day(i, d) for i, d in enumerate(['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'])]
+    LAST_LESSON_NUMBER = None
+    WORKING_DAYS_NUMBER = None
+
+
+class NSParser(TimetableConverter):
     def __init__(self):
-        self.rasp = None
         self.ns = None
 
         self.rooms = None
@@ -99,7 +113,7 @@ class NSParser:
         self.subjects = None
         self.plans = None
 
-    def parse(self, filename):
+    def load(self, filename):
         with open(filename, encoding='windows-1251') as f:
             ns = BeautifulSoup(f, 'lxml').find('timetableexchange').contents[1::2]
         self.ns = ns
@@ -115,8 +129,8 @@ class NSParser:
 
         teachers_tags = teachers_tag.contents[1::2]
         for teacher in teachers_tags:
-            teachers.append(Teacher(teacher.attrs['tid'], teacher.attrs['firstname'], teacher.attrs['lastname'],
-                                    teacher.attrs['middlename']))
+            teachers.append(NSTeacher(teacher.attrs['tid'], teacher.attrs['firstname'], teacher.attrs['lastname'],
+                                      teacher.attrs['middlename']))
 
         return teachers
 
@@ -131,7 +145,7 @@ class NSParser:
 
         rooms_tags = rooms_tag.contents[1::2]
         for room in rooms_tags:
-            rooms.append(Room(room.attrs['id'], room.attrs['name']))
+            rooms.append(NSRoom(room.attrs['id'], room.attrs['name']))
 
         return rooms
 
@@ -146,7 +160,7 @@ class NSParser:
 
         subjects_tags = subjects_tag.contents[1::2]
         for subject in subjects_tags:
-            subjects.append(Subject(subject.attrs['sid'], subject.attrs['name'], subject.attrs['abbr']))
+            subjects.append(NSSubject(subject.attrs['sid'], subject.attrs['name'], subject.attrs['abbr']))
 
         return subjects
 
@@ -162,12 +176,12 @@ class NSParser:
         plan_tags = plan_tag.contents[1::2]
 
         for class_tag in plan_tags:
-            class_ = Class(class_tag.attrs['id'], class_tag.attrs['name'], class_tag.attrs['boys'],
-                           class_tag.attrs['girls'])
+            class_ = NSClass(class_tag.attrs['id'], class_tag.attrs['name'], class_tag.attrs['boys'],
+                             class_tag.attrs['girls'])
 
             lessons_tags = class_tag.contents[1::2]
             for lesson_tag in lessons_tags:
-                lesson = PlanLesson(lesson_tag.attrs['id'], lesson_tag.attrs['name'])
+                lesson = NSLesson(lesson_tag.attrs['id'], lesson_tag.attrs['name'])
                 lesson.set_teacher(self.teachers, lesson_tag.attrs['tid'])
                 lesson.set_subject(self.subjects, lesson_tag.attrs['sid'])
                 class_.add_lesson(lesson)
@@ -176,31 +190,45 @@ class NSParser:
 
         return plans
 
-    def load_all(self):
+    def parse_all(self):
         self.rooms = self.get_rooms()
         self.teachers = self.get_teachers()
         self.subjects = self.get_subjects()
         self.plans = self.get_plan()
 
 
-class HTMLParser:
+class HTMLParser(TimetableConverter):
     def __init__(self):
-        pass
+        self.table = None
 
-    def parse_html(self, filename):
+    def load(self, filename):
         with open(filename, encoding='windows-1251') as f:
             rasp = BeautifulSoup(f, 'lxml')
 
-        table_ = list(rasp.find('tbody'))[::2][1:]
+        full_table = list(rasp.find('table'))[::2]
+        class_names, lessons = full_table[2], full_table[3:]
+
+        week_column_1 = rasp.find('td', {'style': ';text-align:left'})  # Блок с днем недели
+        self.LAST_LESSON_NUMBER = int(week_column_1.attrs['rowspan'])  # Получаем кол-во уроков
+
+        week_column = rasp.find_all('td', {'style': ';text-align:left', 'rowspan': str(self.LAST_LESSON_NUMBER)})
+        self.WORKING_DAYS_NUMBER = len(week_column)
+
+        assert self.LAST_LESSON_NUMBER == len(lessons) // self.WORKING_DAYS_NUMBER
+
         table = []
 
-        for day in range(6):
-            table.append(table_[day * 8:(day + 1) * 8])
+        for day in range(self.WORKING_DAYS_NUMBER):
+            table.append(lessons[day * self.LAST_LESSON_NUMBER:(day + 1) * self.LAST_LESSON_NUMBER])
 
-        self.rasp = table
+        self.table = table
 
 
 if __name__ == '__main__':
     nsparser = NSParser()
-    nsparser.parse('./../ExportCM_2week.nsxml')
-    nsparser.load_all()
+    nsparser.load('./../ExportCM_2week.nsxml')
+    nsparser.parse_all()
+
+    htmlparser = HTMLParser()
+    htmlparser.load('./../7raw.html')
+    htmlparser.get_subjects_set()

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>433</width>
-    <height>532</height>
+    <width>720</width>
+    <height>565</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,7 +16,7 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout">
+     <layout class="QHBoxLayout" name="horizontalLayout_top">
       <item>
        <widget class="QLabel" name="classlabel">
         <property name="font">
@@ -49,22 +49,37 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>417</width>
-         <height>379</height>
+         <width>704</width>
+         <height>410</height>
         </rect>
        </property>
+       <layout class="QVBoxLayout" name="scrollbarLayout"/>
       </widget>
      </widget>
     </item>
     <item>
-     <widget class="QPushButton" name="pushButton">
-      <property name="enabled">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string>Конвертировать</string>
-      </property>
-     </widget>
+     <layout class="QHBoxLayout" name="horizontalLayout_bottom">
+      <item>
+       <widget class="QPushButton" name="checkButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Проверить</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="convertButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Конвертировать</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </item>
    </layout>
   </widget>
@@ -73,7 +88,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>433</width>
+     <width>720</width>
      <height>31</height>
     </rect>
    </property>
