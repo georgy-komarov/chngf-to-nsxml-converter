@@ -2,9 +2,8 @@ import sys  # sys нужен для передачи argv в QApplication
 
 from PyQt5 import QtWidgets
 
-import design  # Это наш конвертированный файл дизайна
 import converter
-from exceptions import *
+import design  # Это наш конвертированный файл дизайна
 
 
 class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
@@ -19,6 +18,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         self.ns_parser = converter.NSParser()
         self.html_parser = converter.HTMLParser()
+
         self.ch_file = None
         self.ns_file = None
 
@@ -46,6 +46,8 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.statusBar.showMessage('Ошибка загрузки NSXML файла!')
             else:
                 self.html_parser.set_classes(self.ns_parser.plans)
+                self.html_parser.parse()
+                self.html_parser.get_subjects_set()
                 self.fill_combobox()
                 self.checkButton.setEnabled(True)
                 self.statusBar.showMessage('Файлы успешно загружены!')
@@ -53,37 +55,46 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
     def fill_combobox(self):
         self.classchoice.addItems([c.name for c in self.ns_parser.plans])
         self.classchoice.setEnabled(True)
-        self.classchoice.currentTextChanged.connect(self.load_corellations)
-        self.load_corellations(self.ns_parser.plans[0].name)
+        self.classchoice.currentTextChanged.connect(self.show_corellations)
+        self.show_corellations(self.ns_parser.plans[0].name)
 
-    def load_corellations(self, name):
+    def show_corellations(self, name):  # first для того, чтобы заполнить словари корелляции впервые
         self.clear_layout(self.scrollbarLayout)
 
-        for c in self.ns_parser.plans:
-            if c.name == name:
-                class_ = c
-                break
-        else:
-            raise NSLoaderException
+        html_class = self.html_parser.get_class_by_name(name)
+        ns_class = self.ns_parser.get_class_by_name(name)
 
-        for i, s in enumerate(class_.plan, start=1):
+        for i, ns_subject in enumerate(ns_class.plan, start=1):
+            items = self.fill_subjects_combobox(ns_subject, html_class)
+
             horizontalLayout = QtWidgets.QHBoxLayout()
             horizontalLayout.setObjectName(f"horizontalLayout_{i}")
 
             subject = QtWidgets.QLabel(self.scrollAreaWidgetContents)
             subject.setObjectName(f"subject_{i}")
-            subject.setText(str(s))
+            subject.setText(str(ns_subject))
             horizontalLayout.addWidget(subject)
 
             subject_comboBox = QtWidgets.QComboBox(self.scrollAreaWidgetContents)
             subject_comboBox.setObjectName(f"subject_comboBox_{i}")
-            subject_comboBox.addItems(list(map(str, [i] * i)))  # TODO Change to subjects
+            subject_comboBox.addItems(items)
+            subject_comboBox.currentTextChanged.connect(self.save_corellations)
             horizontalLayout.addWidget(subject_comboBox)
 
             self.scrollbarLayout.addLayout(horizontalLayout)
 
     def check(self):
-        pass
+        try:
+            classes = self.html_parser.classes
+            for c in classes:
+                corellations, subjects = c.corellations, c.subjects
+                if len(corellations) != len(subjects):
+                    print(c.name, '!!!')  # TODO MessageDialog
+
+            self.convertButton.setEnabled(True)
+            self.convertButton.clicked.connect(self.save_all)
+        except:
+            self.statusBar.showMessage('Что-то пошло не так...')
 
     def clear_layout(self, layout):
         while layout.count():
@@ -92,6 +103,60 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 child.widget().deleteLater()
             elif child.layout() is not None:
                 self.clear_layout(child.layout())
+
+    def fill_subjects_combobox(self, ns_lesson, html_class):
+        html_subjects = list(html_class.subjects)
+        for s in html_subjects:
+            name, teacher = s.split(' — ')
+            if name.lower() == ns_lesson.name.lower() and teacher == ns_lesson.teacher.name or \
+                    html_class.corellations.get(s) == ns_lesson:
+                valid_subject = s
+                html_subjects.remove(s)
+                break
+        else:
+            valid_subject = None
+
+        result = [''] + sorted(list(html_subjects))
+        if valid_subject:
+            result.insert(0, valid_subject)
+            html_class.corellations[valid_subject] = ns_lesson
+        return result
+
+    def save_corellations(self, html_name):
+        sender = self.sender()
+        index = sender.objectName().split('_')[-1]
+
+        class_name = str(self.classchoice.currentText())
+        subject_label = self.findChild(QtWidgets.QLabel, f'subject_{index}')
+        subject_name = str(subject_label.text())
+
+        ns_lesson = self.ns_parser.get_lesson_by_subject_name(subject_name, class_name)
+        html_class = self.html_parser.get_class_by_name(class_name)
+        html_class.corellations[html_name] = ns_lesson
+
+    def save_all(self):
+        timetable = []
+
+        for day in self.ns_parser.DAYS:
+            timetable.append([])
+            for i in range(self.html_parser.LAST_LESSON_NUMBER):
+                timetable[day.id].append([])
+
+        for class_ in self.html_parser.classes:
+            for lesson in class_.lessons:
+                try:
+                    timetable[lesson.day.id][lesson.number].append(class_.corellations[lesson.get_subject()].id)
+                except KeyError as e:
+                    pass
+
+        for day in self.ns_parser.DAYS:  # TODO Save to file directly
+            print(f'<Day id="{day.id + 1}" name="{day.name}" wd="{day.id + 2}" >')
+            for lesson_number, lessons in enumerate(timetable[day.id], start=1):
+                print(f'\t<Lesson timeId="{lesson_number}">')
+                for lesson_id in lessons:
+                    print('\t\t' + f'<csg id="{lesson_id}"/>')
+                print('\t</Lesson>')
+            print('</Day>')
 
 
 def main():

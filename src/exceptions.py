@@ -8,3 +8,15 @@ class NSParserException(NSException):
 
 class NSLoaderException(NSException):
     pass
+
+
+class HTMLException(BaseException):
+    pass
+
+
+class HTMLParserException(HTMLException):
+    pass
+
+
+class HTMLLoaderException(HTMLException):
+    pass

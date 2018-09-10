@@ -43,7 +43,7 @@ class NSTeacher:
         self.firstname = firstname
         self.lastname = lastname
         self.midname = midname
-        self.name = f'{lastname} {firstname[0]}. {midname[0]}.'
+        self.name = f'{lastname} {firstname[0]}.{midname[0]}.'
 
     def __str__(self):
         return self.name
@@ -107,7 +107,7 @@ class HTMLLesson:
         self.number = number
 
     def get_subject(self):
-        return self.name, self.teacher_with_group
+        return f'{self.name} — {self.teacher_with_group}'
 
     def __str__(self):
         return f'[{self.day.name.title()}][{self.number}] - {self.name} ({self.teacher_with_group})'
@@ -121,6 +121,8 @@ class HTMLClass:
         self.name = name
         self.lessons = []
         self.subjects = set()
+
+        self.corellations = {}
 
     def add_lesson(self, lesson):
         self.lessons.append(lesson)
@@ -224,6 +226,23 @@ class NSParser(TimetableConverter):
 
         return plans
 
+    def get_class_by_name(self, name):
+        for c in self.plans:
+            if c.name == name:
+                return c
+        else:
+            raise NSLoaderException
+
+    def get_lesson_by_subject_name(self, subject_name, class_name):
+        class_ = self.get_class_by_name(class_name)
+        subjects = class_.plan
+
+        for s in subjects:
+            if subject_name == s.name:
+                return s
+        else:
+            raise NSLoaderException
+
     def parse_all(self):
         self.rooms = self.get_rooms()
         self.teachers = self.get_teachers()
@@ -262,6 +281,13 @@ class HTMLParser(TimetableConverter):
         for ns_class in ns_classes:
             self.classes.append(HTMLClass(ns_class.name))
 
+    def get_class_by_name(self, name):
+        for c in self.classes:
+            if c.name == name:
+                return c
+        else:
+            raise HTMLLoaderException
+
     def parse(self):
         for day_num, day_name in enumerate(self.DAYS):  # день (пн, вт и т.д.)
             for lesson_num in range(self.LAST_LESSON_NUMBER):  # номер урока
@@ -294,16 +320,3 @@ class HTMLParser(TimetableConverter):
         for class_i, class_ in enumerate(self.classes):
             for lesson in class_.lessons:
                 class_.add_subject(lesson.get_subject())
-
-
-if __name__ == '__main__':
-    nsparser = NSParser()
-    nsparser.load('./../ExportCM_2week.nsxml')
-    nsparser.parse_all()
-
-    htmlparser = HTMLParser()
-    htmlparser.load('./../7raw.html')
-    htmlparser.set_classes(nsparser.plans)
-    htmlparser.parse()
-    htmlparser.get_subjects_set()
-    print('DONE!')
