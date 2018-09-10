@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-from bs4 import Tag
+from bs4 import NavigableString
 
 from exceptions import *
 
@@ -91,11 +91,45 @@ class NSClass:
 
 
 # HTML class
-class HTMLSubject:
-    def __init__(self, name, teacher, room=None):
+class HTMLLesson:
+    def __init__(self, name, teacher, room, day, number):
         self.name = name
-        self.teacher = teacher
-        self.room = room
+
+        self.teacher_with_group = teacher
+        try:
+            self.group_number, self.teacher = teacher.split(':')
+        except ValueError:
+            self.group_number, self.teacher = None, teacher
+
+        self.room = room.lower()
+
+        self.day = day
+        self.number = number
+
+    def get_subject(self):
+        return self.name, self.teacher_with_group
+
+    def __str__(self):
+        return f'[{self.day.name.title()}][{self.number}] - {self.name} ({self.teacher_with_group})'
+
+    def __repr__(self):
+        return str(self)
+
+
+class HTMLClass:
+    def __init__(self, name):
+        self.name = name
+        self.lessons = []
+        self.subjects = set()
+
+    def add_lesson(self, lesson):
+        self.lessons.append(lesson)
+
+    def add_subject(self, subject):
+        self.subjects.add(subject)
+
+    def __str__(self):
+        return self.name
 
 
 class TimetableConverter:
@@ -200,6 +234,7 @@ class NSParser(TimetableConverter):
 class HTMLParser(TimetableConverter):
     def __init__(self):
         self.table = None
+        self.classes = []
 
     def load(self, filename):
         with open(filename, encoding='windows-1251') as f:
@@ -223,6 +258,43 @@ class HTMLParser(TimetableConverter):
 
         self.table = table
 
+    def set_classes(self, ns_classes):
+        for ns_class in ns_classes:
+            self.classes.append(HTMLClass(ns_class.name))
+
+    def parse(self):
+        for day_num, day_name in enumerate(self.DAYS):  # день (пн, вт и т.д.)
+            for lesson_num in range(self.LAST_LESSON_NUMBER):  # номер урока
+                lessons = self.table[day_num][lesson_num].contents
+                if lesson_num == 0:  # если 1-ый урок, обрезаем столбец с названием дня недели и расписанием звонков
+                    lessons = lessons[7::2]
+                else:
+                    lessons = lessons[5::2]  # убираем только расписание звонков
+
+                for class_i, class_ in enumerate(self.classes):
+                    lesson_block = lessons[class_i].contents
+                    if lesson_block and type(lesson_block[0]) != NavigableString:
+                        lesson_block, room_block = lesson_block[0].contents
+                        groups_number = len(lesson_block.contents) // 2
+                        for group_i in range(groups_number):
+                            lesson_name = lesson_block.contents[group_i * 2].text.lstrip('/')
+                            if not lesson_name:  # если в названии только "/"
+                                for group_r in range(group_i - 1, -1, -1):
+                                    lesson_name = lesson_block.contents[group_r * 2].text.lstrip('/')
+                                    if lesson_name:
+                                        break
+                            lesson = HTMLLesson(name=lesson_name,
+                                                teacher=lesson_block.contents[group_i * 2 + 1].text,
+                                                room=room_block.text,
+                                                day=self.DAYS[day_num],
+                                                number=lesson_num)
+                            self.classes[class_i].add_lesson(lesson)
+
+    def get_subjects_set(self):
+        for class_i, class_ in enumerate(self.classes):
+            for lesson in class_.lessons:
+                class_.add_subject(lesson.get_subject())
+
 
 if __name__ == '__main__':
     nsparser = NSParser()
@@ -231,4 +303,7 @@ if __name__ == '__main__':
 
     htmlparser = HTMLParser()
     htmlparser.load('./../7raw.html')
+    htmlparser.set_classes(nsparser.plans)
+    htmlparser.parse()
     htmlparser.get_subjects_set()
+    print('DONE!')

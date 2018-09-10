@@ -45,6 +45,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             except:
                 self.statusBar.showMessage('Ошибка загрузки NSXML файла!')
             else:
+                self.html_parser.set_classes(self.ns_parser.plans)
                 self.fill_combobox()
                 self.checkButton.setEnabled(True)
                 self.statusBar.showMessage('Файлы успешно загружены!')
@@ -76,6 +77,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
             subject_comboBox = QtWidgets.QComboBox(self.scrollAreaWidgetContents)
             subject_comboBox.setObjectName(f"subject_comboBox_{i}")
+            subject_comboBox.addItems(list(map(str, [i] * i)))  # TODO Change to subjects
             horizontalLayout.addWidget(subject_comboBox)
 
             self.scrollbarLayout.addLayout(horizontalLayout)
