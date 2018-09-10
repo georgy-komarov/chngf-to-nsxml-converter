@@ -67,7 +67,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         for i, s in enumerate(class_.plan, start=1):
             horizontalLayout = QtWidgets.QHBoxLayout()
-            horizontalLayout.setObjectName("horizontalLayout_{i}")
+            horizontalLayout.setObjectName(f"horizontalLayout_{i}")
 
             subject = QtWidgets.QLabel(self.scrollAreaWidgetContents)
             subject.setObjectName(f"subject_{i}")
