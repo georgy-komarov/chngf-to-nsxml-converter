@@ -34,7 +34,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         try:
             assert self.ch_file
             self.html_parser.load(self.ch_file)
-        except:
+        except BaseException as e:  # TODO: Better error message
             self.statusBar.showMessage('Ошибка загрузки HTML файла!')
 
         if self.html_parser.table:
@@ -89,11 +89,11 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             for c in classes:
                 corellations, subjects = c.corellations, c.subjects
                 if len(corellations) != len(subjects):
-                    print(c.name, '!!!')  # TODO MessageDialog
+                    print(c.name, '!!!')  # TODO: MessageDialog
 
             self.convertButton.setEnabled(True)
             self.convertButton.clicked.connect(self.save_all)
-        except:
+        except BaseException as e:  # TODO: Better error message
             self.statusBar.showMessage('Что-то пошло не так...')
 
     def clear_layout(self, layout):
@@ -116,7 +116,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         else:
             valid_subject = None
 
-        result = [''] + sorted(list(html_subjects))
+        result = [''] + sorted(list(html_subjects))  # TODO: Sort by key=x.lower()
         if valid_subject:
             result.insert(0, valid_subject)
             html_class.corellations[valid_subject] = ns_lesson
@@ -132,7 +132,8 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
         ns_lesson = self.ns_parser.get_lesson_by_subject_name(subject_name, class_name)
         html_class = self.html_parser.get_class_by_name(class_name)
-        html_class.corellations[html_name] = ns_lesson
+        html_class.corellations[
+            html_name] = ns_lesson  # FIXME: Fundamental bug (must swap keys and values in corellations dict)
 
     def save_all(self):
         timetable = []
@@ -149,7 +150,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 except KeyError as e:
                     pass
 
-        for day in self.ns_parser.DAYS:  # TODO Save to file directly
+        for day in self.ns_parser.DAYS:  # TODO: Save to file directly
             print(f'<Day id="{day.id + 1}" name="{day.name}" wd="{day.id + 2}" >')
             for lesson_number, lessons in enumerate(timetable[day.id], start=1):
                 print(f'\t<Lesson timeId="{lesson_number}">')
