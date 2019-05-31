@@ -1,4 +1,5 @@
 import sys  # sys нужен для передачи argv в QApplication
+import traceback
 
 from PyQt5 import QtWidgets
 
@@ -34,8 +35,13 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         try:
             assert self.ch_file
             self.html_parser.load(self.ch_file)
-        except BaseException as e:  # TODO: Better error message
-            self.statusBar.showMessage('Ошибка загрузки HTML файла!')
+        except BaseException as e:
+            msg = 'Ошибка загрузки HTML файла! Отправьте лог на georgy.komarov@mail.ru'
+            error = traceback.format_exc()
+
+            with open('error.log', 'a') as log:
+                log.write(msg + '\n\n' + error)
+            self.statusBar.showMessage(msg)
 
         if self.html_parser.table:
             try:
@@ -43,7 +49,12 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.ns_parser.load(self.ns_file)
                 self.ns_parser.parse_all()
             except:
-                self.statusBar.showMessage('Ошибка загрузки NSXML файла!')
+                msg = 'Ошибка загрузки NSXML файла!'
+                error = traceback.format_exc()
+
+                with open('error.log', 'a') as log:
+                    log.write(msg + '\n\n' + error)
+                self.statusBar.showMessage(msg)
             else:
                 self.html_parser.set_classes(self.ns_parser.plans)
                 self.html_parser.parse()
@@ -58,21 +69,21 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.classchoice.currentTextChanged.connect(self.show_corellations)
         self.show_corellations(self.ns_parser.plans[0].name)
 
-    def show_corellations(self, name):  # first для того, чтобы заполнить словари корелляции впервые
+    def show_corellations(self, name):  # name - номер+буква класса
         self.clear_layout(self.scrollbarLayout)
 
         html_class = self.html_parser.get_class_by_name(name)
         ns_class = self.ns_parser.get_class_by_name(name)
 
-        for i, ns_subject in enumerate(ns_class.plan, start=1):
-            items = self.fill_subjects_combobox(ns_subject, html_class)
+        for i, ns_lesson in enumerate(ns_class.plan, start=1):
+            items = self.fill_subjects_combobox(ns_lesson, html_class)
 
             horizontalLayout = QtWidgets.QHBoxLayout()
             horizontalLayout.setObjectName(f"horizontalLayout_{i}")
 
             subject = QtWidgets.QLabel(self.scrollAreaWidgetContents)
             subject.setObjectName(f"subject_{i}")
-            subject.setText(str(ns_subject))
+            subject.setText(f'{ns_lesson} [{ns_lesson.teacher.name}]')
             horizontalLayout.addWidget(subject)
 
             subject_comboBox = QtWidgets.QComboBox(self.scrollAreaWidgetContents)
@@ -85,16 +96,28 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
 
     def check(self):
         try:
+            not_completed = []
             classes = self.html_parser.classes
             for c in classes:
                 corellations, subjects = c.corellations, c.subjects
                 if len(corellations) != len(subjects):
-                    print(c.name, '!!!')  # TODO: MessageDialog
+                    not_completed.append(c.name)
+            if not_completed:
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Warning)
+                msg.setText("Внимание!")
+                msg.setInformativeText(f'В классах {", ".join(not_completed)} заполнены не все предметы!')
+                msg.exec_()
 
             self.convertButton.setEnabled(True)
             self.convertButton.clicked.connect(self.save_all)
-        except BaseException as e:  # TODO: Better error message
-            self.statusBar.showMessage('Что-то пошло не так...')
+        except BaseException as e:
+            msg = 'Что-то пошло не так...'
+            error = traceback.format_exc()
+
+            with open('error.log', 'a') as log:
+                log.write(msg + '\n\n' + error)
+            self.statusBar.showMessage(msg)
 
     def clear_layout(self, layout):
         while layout.count():
@@ -105,21 +128,29 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 self.clear_layout(child.layout())
 
     def fill_subjects_combobox(self, ns_lesson, html_class):
+        def smart_sort(subject):
+            subject, teacher = subject.split(' — ')
+            subject = subject.lower()
+            if teacher[-1].isdigit():
+                digit = int(teacher[-1])
+            else:
+                digit = 0
+            return tuple([subject, digit])
+
         html_subjects = list(html_class.subjects)
-        for s in html_subjects:
-            name, teacher = s.split(' — ')
-            if name.lower() == ns_lesson.name.lower() and teacher == ns_lesson.teacher.name or \
-                    html_class.corellations.get(s) == ns_lesson:
-                valid_subject = s
-                html_subjects.remove(s)
+        for subject_name in html_subjects:
+            name, teacher = subject_name.split(' — ')
+            if name.lower() == ns_lesson.name.lower() and teacher == ns_lesson.teacher.name:
+                valid_subject = subject_name
+                html_subjects.remove(subject_name)
                 break
         else:
             valid_subject = None
 
-        result = [''] + sorted(list(html_subjects))  # TODO: Sort by key=x.lower()
+        result = [''] + sorted(list(html_subjects), key=smart_sort)
         if valid_subject:
             result.insert(0, valid_subject)
-            html_class.corellations[valid_subject] = ns_lesson
+            html_class.corellations[ns_lesson] = valid_subject
         return result
 
     def save_corellations(self, html_name):
@@ -127,13 +158,13 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         index = sender.objectName().split('_')[-1]
 
         class_name = str(self.classchoice.currentText())
-        subject_label = self.findChild(QtWidgets.QLabel, f'subject_{index}')
-        subject_name = str(subject_label.text())
+        subject_label = self.findChild(QtWidgets.QLabel, f'subject_{index}').text()
+        subject_name, teacher_name = subject_label.split(' [')
 
         ns_lesson = self.ns_parser.get_lesson_by_subject_name(subject_name, class_name)
         html_class = self.html_parser.get_class_by_name(class_name)
         html_class.corellations[
-            html_name] = ns_lesson  # FIXME: Fundamental bug (must swap keys and values in corellations dict)
+            ns_lesson] = html_name
 
     def save_all(self):
         timetable = []
@@ -144,9 +175,12 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 timetable[day.id].append([])
 
         for class_ in self.html_parser.classes:
-            for lesson in class_.lessons:
+            reversed_corellations = {v: k for k, v in
+                                     class_.corellations.items()}  # Переворачиваем словарь для текущего класса
+            for lesson in class_.lessons:  # HTMLLesson День[№ урока] - Предмет (учитель)
                 try:
-                    timetable[lesson.day.id][lesson.number].append(class_.corellations[lesson.get_subject()].id)
+                    day_num_lessons = timetable[lesson.day.id][lesson.number]  # Список уроков (день, номер)
+                    day_num_lessons.append(reversed_corellations[lesson.get_subject()].id)
                 except KeyError as e:
                     pass
 
