@@ -156,11 +156,12 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
             return tuple([subject, digit])
 
         html_subjects = list(html_class.subjects)
-        for subject_name in html_subjects:
-            name, teacher = subject_name.split(' — ')
-            if name.lower() == ns_lesson.name.lower() and teacher == ns_lesson.teacher.name:
-                valid_subject = subject_name
-                html_subjects.remove(subject_name)
+        for subject in html_subjects:
+            name, teacher = subject.split(' — ')
+            if name.lower() == ns_lesson.name.lower() and teacher == ns_lesson.teacher.name or \
+                    html_class.corellations.get(ns_lesson) == subject:  # учитываем сохраненное значение
+                valid_subject = subject
+                html_subjects.remove(subject)
                 break
         else:
             valid_subject = None
