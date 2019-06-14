@@ -31,6 +31,24 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
         self.ns_file = QtWidgets.QFileDialog.getOpenFileName(self, "Выберите файл с расписанием из Сетевого города",
                                                              filter="NSXML файлы (*.nsxml);;Все файлы (*)")[0]
 
+    def save_ns_file(self):
+        try:
+            name = QtWidgets.QFileDialog.getSaveFileName(self, 'Сохранить файл',
+                                                         filter="NSXML файл (*.nsxml);;Все файлы (*)")[0]
+            result = self.save_all()
+
+            with open(name, 'w', encoding='windows-1251') as f:
+                f.write(result)
+
+            self.statusBar.showMessage('Файл сохранён!')
+        except BaseException as e:
+            msg = 'Ошибка сохранения файла! Отправьте лог на georgy.komarov@mail.ru'
+            error = traceback.format_exc()
+
+            with open('error.log', 'a') as log:
+                log.write(msg + '\n\n' + error)
+            self.statusBar.showMessage(msg)
+
     def load_data(self):
         try:
             assert self.ch_file
@@ -110,7 +128,7 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 msg.exec_()
 
             self.convertButton.setEnabled(True)
-            self.convertButton.clicked.connect(self.save_all)
+            self.convertButton.clicked.connect(self.save_ns_file)
         except BaseException as e:
             msg = 'Что-то пошло не так...'
             error = traceback.format_exc()
@@ -184,14 +202,30 @@ class TimeTableApp(QtWidgets.QMainWindow, design.Ui_MainWindow):
                 except KeyError as e:
                     pass
 
+        timetable_result = ''
         for day in self.ns_parser.DAYS:  # TODO: Save to file directly
-            print(f'<Day id="{day.id + 1}" name="{day.name}" wd="{day.id + 2}" >')
+            timetable_result += f'<Day id="{day.id + 1}" name="{day.name}" wd="{day.id + 2}" >\n'
             for lesson_number, lessons in enumerate(timetable[day.id], start=1):
-                print(f'\t<Lesson timeId="{lesson_number}">')
+                timetable_result += f'\t<Lesson timeId="{lesson_number}">\n'
                 for lesson_id in lessons:
-                    print('\t\t' + f'<csg id="{lesson_id}"/>')
-                print('\t</Lesson>')
-            print('</Day>')
+                    timetable_result += '\t\t' + f'<csg id="{lesson_id}"/>\n'
+                timetable_result += '\t</Lesson>\n'
+            timetable_result += '</Day>\n'
+
+        with open(self.ns_file, encoding='windows-1251') as f:
+            ns_file = f.readlines()
+
+        week_block_start = None
+        week_block_end = None
+
+        for i, j in enumerate(ns_file):
+            if week_block_start is None and j.strip().lower().startswith('<week'):
+                week_block_start = i
+            elif week_block_end is None and j.strip().lower().startswith('</week>'):
+                week_block_end = i
+
+        result = ''.join(ns_file[:week_block_start + 1]) + timetable_result + ''.join(ns_file[week_block_end:])
+        return result
 
 
 def main():
